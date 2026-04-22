@@ -7740,13 +7740,16 @@ class AIAgent:
                 store=self._memory_store,
             )
             # Bridge: notify external memory provider of built-in memory writes
-            if self._memory_manager and function_args.get("action") in ("add", "replace"):
+            if self._memory_manager and function_args.get("action") in ("add", "replace", "remove"):
                 try:
-                    self._memory_manager.on_memory_write(
-                        function_args.get("action", ""),
-                        target,
-                        function_args.get("content", ""),
+                    action = function_args.get("action", "")
+                    # remove: pass the actual deleted entry so provider can clean up
+                    # add/replace: pass the content
+                    write_content = (
+                        result.get("deleted_entry", "") if action == "remove"
+                        else function_args.get("content", "")
                     )
+                    self._memory_manager.on_memory_write(action, target, write_content)
                 except Exception:
                     pass
             return result
@@ -8251,13 +8254,14 @@ class AIAgent:
                     store=self._memory_store,
                 )
                 # Bridge: notify external memory provider of built-in memory writes
-                if self._memory_manager and function_args.get("action") in ("add", "replace"):
+                if self._memory_manager and function_args.get("action") in ("add", "replace", "remove"):
                     try:
-                        self._memory_manager.on_memory_write(
-                            function_args.get("action", ""),
-                            target,
-                            function_args.get("content", ""),
+                        action = function_args.get("action", "")
+                        write_content = (
+                            function_result.get("deleted_entry", "") if action == "remove"
+                            else function_args.get("content", "")
                         )
+                        self._memory_manager.on_memory_write(action, target, write_content)
                     except Exception:
                         pass
                 tool_duration = time.time() - tool_start_time
