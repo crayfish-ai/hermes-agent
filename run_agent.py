@@ -7448,6 +7448,13 @@ class AIAgent:
                     tools=[memory_tool_def],
                     temperature=_flush_temperature,
                     max_tokens=5120,
+                    main_runtime={
+                        "model": self.model,
+                        "provider": self.provider,
+                        "base_url": self.base_url,
+                        "api_key": self.api_key,
+                        "api_mode": self.api_mode,
+                    },
                     # timeout resolved from auxiliary.flush_memories.timeout config
                 )
             except RuntimeError:
