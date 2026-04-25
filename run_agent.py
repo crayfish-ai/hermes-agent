@@ -8002,6 +8002,13 @@ class AIAgent:
                     tools=[memory_tool_def],
                     temperature=_flush_temperature,
                     max_tokens=5120,
+                    main_runtime={
+                        "model": self.model,
+                        "provider": self.provider,
+                        "base_url": self.base_url,
+                        "api_key": self.api_key,
+                        "api_mode": self.api_mode,
+                    },
                     # timeout resolved from auxiliary.flush_memories.timeout config
                 )
             except Exception as e:
@@ -8362,12 +8369,17 @@ class AIAgent:
                 store=self._memory_store,
             )
             # Bridge: notify external memory provider of built-in memory writes
-            if self._memory_manager and function_args.get("action") in ("add", "replace"):
+            if self._memory_manager and function_args.get("action") in ("add", "replace", "remove"):
                 try:
+                    action = function_args.get("action", "")
+                    write_content = (
+                        result.get("deleted_entry", "") if action == "remove"
+                        else function_args.get("content", "")
+                    )
                     self._memory_manager.on_memory_write(
-                        function_args.get("action", ""),
+                        action,
                         target,
-                        function_args.get("content", ""),
+                        write_content,
                         metadata=self._build_memory_write_metadata(
                             task_id=effective_task_id,
                             tool_call_id=tool_call_id,
@@ -8877,12 +8889,17 @@ class AIAgent:
                     store=self._memory_store,
                 )
                 # Bridge: notify external memory provider of built-in memory writes
-                if self._memory_manager and function_args.get("action") in ("add", "replace"):
+                if self._memory_manager and function_args.get("action") in ("add", "replace", "remove"):
                     try:
+                        action = function_args.get("action", "")
+                        write_content = (
+                            function_result.get("deleted_entry", "") if action == "remove"
+                            else function_args.get("content", "")
+                        )
                         self._memory_manager.on_memory_write(
-                            function_args.get("action", ""),
+                            action,
                             target,
-                            function_args.get("content", ""),
+                            write_content,
                             metadata=self._build_memory_write_metadata(
                                 task_id=effective_task_id,
                                 tool_call_id=getattr(tool_call, "id", None),
