@@ -196,6 +196,13 @@ _HERMES_BEHAVIORAL_VARS = frozenset({
     "TERMINAL_CONTAINER_MEMORY",
     "TERMINAL_CONTAINER_PERSISTENT",
     "TERMINAL_DOCKER_RUN_AS_HOST_USER",
+    # Cron session vars — HERMES_CRON_SESSION=1 forces cron_mode=deny
+    # path, which silently bypasses blocking approval flow for dangerous
+    # commands in tests that need the gateway/ask approval path.
+    "HERMES_CRON_SESSION",
+    "HERMES_CRON_AUTO_DELIVER_ALL",
+    "HERMES_CRON_AUTO_DELIVER_PLATFORM",
+    "HERMES_CRON_AUTO_DELIVER_CHAT_ID",
     "BROWSER_CDP_URL",
     "CAMOFOX_URL",
     # Platform allowlists — not credentials, but if set from any source
@@ -305,6 +312,17 @@ def _hermetic_environment(tmp_path, monkeypatch):
     monkeypatch.delenv("GMI_API_KEY", raising=False)
     monkeypatch.delenv("GMI_BASE_URL", raising=False)
 
+    # 6. Wipe the config YAML cache so load_config() re-reads from the fake
+    #    hermes home established in step 3. Without this, module imports that
+    #    ran during test collection cached the real ~/.hermes/config.yaml and
+    #    load_permanent_allowlist() would re-populate _permanent_approved from
+    #    the real allowlist every time a test calls check_all_command_guards().
+    try:
+        from hermes_cli import config as _config_mod
+        _config_mod._RAW_CONFIG_CACHE.clear()
+    except Exception:
+        pass
+
 
 # Backward-compat alias — old tests reference this fixture name. Keep it
 # as a no-op wrapper so imports don't break.
@@ -345,6 +363,16 @@ def _reset_module_state():
         _logger.disabled = False
         _logger.setLevel(logging.NOTSET)
         _logger.propagate = True
+    # --- hermes_cli.config — in-memory YAML cache ---
+    # load_config() caches by config file path (mtime, size). When
+    # _hermetic_environment redirects HERMES_HOME to a temp dir, the cache
+    # still holds the real ~/.hermes/config.yaml data. Wipe it so the next
+    # load_config() call re-reads from the fake hermes home.
+    try:
+        from hermes_cli import config as _config_mod
+        _config_mod._RAW_CONFIG_CACHE.clear()
+    except Exception:
+        pass
 
     # --- tools.approval — the single biggest source of cross-test pollution ---
     try:
