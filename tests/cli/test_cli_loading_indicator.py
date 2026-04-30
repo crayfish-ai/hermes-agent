@@ -50,7 +50,8 @@ class TestCLILoadingIndicator:
             print("reload done")
 
         with patch.object(cli_obj, "_reload_mcp", side_effect=fake_reload), \
-             patch.object(cli_obj, "_invalidate") as invalidate_mock:
+             patch.object(cli_obj, "_invalidate") as invalidate_mock, \
+             patch.object(cli_obj, "_prompt_text_input", return_value="1"):
             assert cli_obj.process_command("/reload-mcp")
 
         output = capsys.readouterr().out
