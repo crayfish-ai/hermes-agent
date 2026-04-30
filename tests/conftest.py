@@ -37,6 +37,23 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 
+# ── pytest hooks ────────────────────────────────────────────────────────────
+#
+# pytest_configure runs BEFORE xdist worker processes are spawned, so this is
+# the only place that can clear env vars (like HERMES_CRON_SESSION) that
+# xdist workers would otherwise inherit from the parent shell.
+#
+
+
+def pytest_configure(config):
+    """Clear HERMES_CRON_SESSION before workers are forked — cannot wait for
+    the hermetic_environment fixture since that runs inside each worker."""
+    os.environ.pop("HERMES_CRON_SESSION", None)
+    os.environ.pop("HERMES_CRON_AUTO_DELIVER_ALL", None)
+    os.environ.pop("HERMES_CRON_AUTO_DELIVER_PLATFORM", None)
+    os.environ.pop("HERMES_CRON_AUTO_DELIVER_CHAT_ID", None)
+
+
 # ── Credential env-var filter ──────────────────────────────────────────────
 #
 # Any env var in the current process matching ONE of these patterns is
@@ -383,10 +400,12 @@ def _reset_module_state():
         _approval_mod._pending.clear()
         _approval_mod._gateway_queues.clear()
         _approval_mod._gateway_notify_cbs.clear()
-        # ContextVar: reset to empty string so get_current_session_key()
-        # falls through to the env var / default path, matching a fresh
-        # process.
         _approval_mod._approval_session_key.set("")
+        # Re-load the allowlist from the (now-fake) HERMES_HOME so the test
+        # body runs with a clean _permanent_approved instead of data that was
+        # loaded from the real ~/.hermes/config.yaml when the module was first
+        # imported (before the hermetic environment was active).
+        _approval_mod.load_permanent_allowlist()
     except Exception:
         pass
 
