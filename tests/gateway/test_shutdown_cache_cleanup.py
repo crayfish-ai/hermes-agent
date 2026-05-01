@@ -61,7 +61,7 @@ class _FakeGateway:
     async def _notify_active_sessions_of_shutdown(self):
         pass
 
-    async def _drain_active_agents(self, timeout):
+    async def _drain_active_agents(self, timeout, exclude_key=None):
         return {}, False
 
     def _finalize_shutdown_agents(self, agents):
