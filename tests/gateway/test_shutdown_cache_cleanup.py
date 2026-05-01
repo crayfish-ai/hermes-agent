@@ -33,6 +33,7 @@ class _FakeGateway:
         self._restart_requested = False
         self._restart_detached = False
         self._restart_via_service = False
+        self._restart_caller_key = None
         self._stop_task = None
         self._exit_cleanly = False
         self._exit_with_failure = False

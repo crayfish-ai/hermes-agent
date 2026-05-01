@@ -214,6 +214,7 @@ class TestGatewayCleanupWiring:
         runner._restart_detached = False
         runner._restart_via_service = False
         runner._restart_drain_timeout = 5.0
+        runner._restart_caller_key = None
         runner._voice_mode = {}
         runner._session_model_overrides = {}
         runner._update_prompt_pending = {}
