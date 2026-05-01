@@ -56,6 +56,7 @@ def _make_runner():
     runner._restart_detached = False
     runner._restart_via_service = False
     runner._restart_drain_timeout = 0.0
+    runner._restart_caller_key = None
     runner._stop_task = None
     runner._exit_code = None
     runner._update_runtime_status = MagicMock()
