@@ -395,6 +395,7 @@ class FeishuAdapterSettings:
     group_rules: Dict[str, FeishuGroupRule] = field(default_factory=dict)
     allow_bots: str = "none"  # "none" | "mentions" | "all"
     require_mention: bool = True
+    bot_mention_map: Dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -417,6 +418,26 @@ class FeishuBatchState:
 # ---------------------------------------------------------------------------
 # Admission: policy types
 # ---------------------------------------------------------------------------
+
+
+def _parse_bot_mention_map(raw: str) -> Dict[str, str]:
+    """Parse ``FEISHU_BOT_MENTION_MAP`` env var.
+
+    Format: ``name1:ou_xxx,name2:ou_yyy`` → ``{"name1": "ou_xxx", ...}``.
+    """
+    result: Dict[str, str] = {}
+    if not raw or not raw.strip():
+        return result
+    for pair in raw.strip().split(","):
+        pair = pair.strip()
+        if ":" not in pair:
+            continue
+        name, open_id = pair.split(":", 1)
+        name = name.strip()
+        open_id = open_id.strip()
+        if name and open_id:
+            result[name] = open_id
+    return result
 
 
 RejectReason = Literal[
@@ -1474,6 +1495,8 @@ class FeishuAdapter(BasePlatformAdapter):
         # Feishu reaction deletion requires the opaque reaction_id returned
         # by create, so we cache it per message_id.
         self._pending_processing_reactions: "OrderedDict[str, str]" = OrderedDict()
+        # Track bot that @mentioned us for one-shot auto-@ reply
+        self._pending_mention_bot_name: Optional[str] = None
         self._load_seen_message_ids()
 
     @staticmethod
@@ -1576,6 +1599,9 @@ class FeishuAdapter(BasePlatformAdapter):
             require_mention=_to_boolean(
                 extra.get("require_mention", os.getenv("FEISHU_REQUIRE_MENTION", "true"))
             ),
+            bot_mention_map=_parse_bot_mention_map(
+                os.getenv("FEISHU_BOT_MENTION_MAP", "")
+            ),
         )
 
     def _apply_settings(self, settings: FeishuAdapterSettings) -> None:
@@ -1608,6 +1634,7 @@ class FeishuAdapter(BasePlatformAdapter):
         self._ws_ping_timeout = settings.ws_ping_timeout
         self._allow_bots = settings.allow_bots
         self._require_mention = settings.require_mention
+        self._bot_mention_map = settings.bot_mention_map
 
     def _build_event_handler(self) -> Any:
         if EventDispatcherHandler is None:
@@ -3108,6 +3135,18 @@ class FeishuAdapter(BasePlatformAdapter):
     ) -> None:
         text, inbound_type, media_urls, media_types, mentions = await self._extract_message_content(message)
 
+        # When a known bot @mentions us in a group, track for one-shot auto-@ reply
+        if is_bot and chat_type == "group" and any(m.is_self for m in mentions):
+            sender_open_id = (getattr(sender_id, "open_id", None) or "").strip()
+            if sender_open_id:
+                bot_name = next(
+                    (name for name, oid in self._bot_mention_map.items()
+                     if oid == sender_open_id),
+                    None,
+                )
+                if bot_name:
+                    self._pending_mention_bot_name = bot_name
+
         if inbound_type == MessageType.TEXT:
             text = _strip_edge_self_mentions(text, mentions)
             if text.startswith("/"):
@@ -4374,7 +4413,51 @@ class FeishuAdapter(BasePlatformAdapter):
     # Outbound payload construction and send pipeline
     # =========================================================================
 
+    def _resolve_bot_mentions(self, content: str) -> tuple[str, list[str]]:
+        """Detect text ``@bot_name`` → return (cleaned_text, [open_ids]).
+
+        The returned open_ids will be rendered as proper Feishu post ``at``
+        elements — not the plain ``<at>`` text syntax, which the Feishu
+        backend does not treat as a mention event.
+        """
+        bot_mention_map = self._bot_mention_map
+        if not bot_mention_map:
+            return content, []
+        mentioned: list[str] = []
+        result = content
+        for bot_name, open_id in bot_mention_map.items():
+            _cjk = "\u4e00-\u9fff\u3000-\u303f\uff00-\uffef"
+            _prefix = r"(^|[\s,，。\.!！?？:：;；\)\）\(\（\-—…" + _cjk + r"])"
+            _suffix = r"(?=[\s,，。\.!！?？:：;；\)\）\-—…" + _cjk + r"]|$)"
+            pattern = _prefix + r"@" + re.escape(bot_name) + _suffix
+            new_result = re.sub(pattern, r"\1", result, flags=re.MULTILINE)
+            if new_result != result:
+                mentioned.append(open_id)
+                result = new_result
+        return result.strip(), mentioned
+
+    def _build_mention_post_payload(self, content: str, mentioned_open_ids: list[str]) -> str:
+        """Build a Feishu post payload with explicit ``at`` tags."""
+        rows: list[list[dict]] = []
+        at_row = [{"tag": "at", "user_id": oid} for oid in mentioned_open_ids]
+        for i in range(len(at_row) - 1, 0, -1):
+            at_row.insert(i, {"tag": "text", "text": " "})
+        rows.append(at_row)
+        if content:
+            rows.append([{"tag": "text", "text": content}])
+        return json.dumps({"zh_cn": {"content": rows}}, ensure_ascii=False)
+
     def _build_outbound_payload(self, content: str) -> tuple[str, str]:
+        # Auto-prepend @bot_name when a known bot @mentioned us this turn
+        pending = self._pending_mention_bot_name
+        if pending:
+            self._pending_mention_bot_name = None
+            if f"@{pending}" not in content:
+                content = f"@{pending} {content}"
+        # Convert text @bot_name → Feishu post at-mentions
+        content, mentioned = self._resolve_bot_mentions(content)
+        if mentioned:
+            return "post", self._build_mention_post_payload(content, mentioned)
         # Feishu post-type 'md' elements do not render markdown tables; sending
         # table content as post causes the message to appear blank on the client.
         # Force plain text for anything that looks like a markdown table.
