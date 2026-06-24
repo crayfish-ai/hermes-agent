@@ -1727,19 +1727,30 @@ class FeishuAdapter(BasePlatformAdapter):
         if not isinstance(data, dict):
             return
         now = time.time()
-        for name, oid in data.get("map", {}).items():
-            if name and oid:
-                self._bot_mention_map[name] = oid
-        for oid, ts in data.get("fetch_time", {}).items():
-            if ts < now - 86400 * 7:  # skip entries older than 7 days
-                continue
-            self._bot_name_fetch_time[oid] = ts
-        for chat_id in data.get("completed_chats", []):
-            if chat_id:
-                self._cold_start_completed_chats.add(chat_id)
-        for oid in data.get("mentions_checked", []):
-            if oid:
-                self._mentions_checked.add(oid)
+        try:
+            for name, oid in data.get("map", {}).items():
+                if name and oid:
+                    self._bot_mention_map[name] = oid
+            for oid, ts in data.get("fetch_time", {}).items():
+                if ts < now - 86400 * 7:  # skip entries older than 7 days
+                    continue
+                self._bot_name_fetch_time[oid] = ts
+            for chat_id in data.get("completed_chats", []):
+                if chat_id:
+                    self._cold_start_completed_chats.add(chat_id)
+            for oid in data.get("mentions_checked", []):
+                if oid:
+                    self._mentions_checked.add(oid)
+        except TypeError:
+            logger.warning(
+                "[Feishu] Corrupt bot map cache — deleting %s and starting fresh",
+                cache_path,
+            )
+            try:
+                os.unlink(cache_path)
+            except OSError:
+                pass
+            return
         if self._bot_mention_map:
             logger.info(
                 "[Feishu] Loaded %d bots from cache file",
