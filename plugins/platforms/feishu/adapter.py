@@ -1728,20 +1728,28 @@ class FeishuAdapter(BasePlatformAdapter):
             return
         now = time.time()
         try:
-            for name, oid in data.get("map", {}).items():
-                if name and oid:
-                    self._bot_mention_map[name] = oid
-            for oid, ts in data.get("fetch_time", {}).items():
-                if ts < now - 86400 * 7:  # skip entries older than 7 days
-                    continue
-                self._bot_name_fetch_time[oid] = ts
+            # Safely restore bot map (must be a dict)
+            bot_map = data.get("map", {})
+            if isinstance(bot_map, dict):
+                for name, oid in bot_map.items():
+                    if name and oid:
+                        self._bot_mention_map[name] = oid
+            # Safely restore fetch timestamps
+            fetch_time = data.get("fetch_time", {})
+            if isinstance(fetch_time, dict):
+                for oid, ts in fetch_time.items():
+                    if ts < now - 86400 * 7:  # skip entries older than 7 days
+                        continue
+                    self._bot_name_fetch_time[oid] = ts
+            # Safely restore completed chats (validate element type)
             for chat_id in data.get("completed_chats", []):
-                if chat_id:
+                if isinstance(chat_id, str) and chat_id:
                     self._cold_start_completed_chats.add(chat_id)
+            # Safely restore mention checks
             for oid in data.get("mentions_checked", []):
-                if oid:
+                if isinstance(oid, str) and oid:
                     self._mentions_checked.add(oid)
-        except TypeError:
+        except (TypeError, AttributeError):
             logger.warning(
                 "[Feishu] Corrupt bot map cache — deleting %s and starting fresh",
                 cache_path,
@@ -1780,7 +1788,7 @@ class FeishuAdapter(BasePlatformAdapter):
                 except OSError:
                     pass
                 raise
-        except OSError:
+        except Exception:
             logger.debug("[Feishu] Failed to write bot map cache", exc_info=True)
 
     def _cache_file_exists(self) -> bool:
