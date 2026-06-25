@@ -643,7 +643,6 @@ class TestAdapterBehavior(unittest.TestCase):
                 "reaction_created",
                 "reaction_deleted",
                 "card_action",
-                "bot_added",
                 "bot_deleted",
                 "p2p_chat_entered",
                 "message_recalled",

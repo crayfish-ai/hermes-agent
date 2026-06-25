@@ -1595,7 +1595,7 @@ class FeishuAdapter(BasePlatformAdapter):
             require_mention=_to_boolean(
                 extra.get("require_mention", os.getenv("FEISHU_REQUIRE_MENTION", "true"))
             ),
-            bot_mention_map=_parse_bot_mention_map_env(),
+            bot_mention_map=FeishuAdapter._parse_bot_mention_map_env(),
         )
 
     def _apply_settings(self, settings: FeishuAdapterSettings) -> None:
@@ -4102,10 +4102,10 @@ class FeishuAdapter(BasePlatformAdapter):
                 or getattr(user, "nickname", None)
                 or getattr(user, "en_name", None)
             )
-            if name and isinstance(name, str):
+            if name is not None and isinstance(name, str):
                 name = name.strip()
+                self._sender_name_cache[trimmed] = (name, now + _FEISHU_SENDER_NAME_TTL_SECONDS)
                 if name:
-                    self._sender_name_cache[trimmed] = (name, now + _FEISHU_SENDER_NAME_TTL_SECONDS)
                     return name
         except Exception:
             logger.debug("[Feishu] Failed to resolve sender name for %s", sender_id, exc_info=True)
