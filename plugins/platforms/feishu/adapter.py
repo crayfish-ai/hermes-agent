@@ -1706,7 +1706,7 @@ class FeishuAdapter(BasePlatformAdapter):
             # env var (FEISHU_BOT_MENTION_MAP).  Otherwise the cold-start
             # persistence only kicks in on the first inbound bot message.
             if self._bot_mention_map and not self._cache_file_exists():
-                self._save_bot_map_cache()
+                await self._save_bot_map_cache()
             logger.info("[Feishu] Connected in %s mode (%s)", self._connection_mode, self._domain_name)
             return True
         except Exception as exc:
@@ -1757,28 +1757,29 @@ class FeishuAdapter(BasePlatformAdapter):
                 len(self._bot_mention_map),
             )
 
-    def _save_bot_map_cache(self) -> None:
+    async def _save_bot_map_cache(self) -> None:
         """Persist the current ``_bot_mention_map`` to a JSON file."""
         cache_dir = get_hermes_home()
         cache_path = str(cache_dir / self._BOT_MAP_CACHE_FILE)
-        try:
-            data = {
-                "map": dict(self._bot_mention_map),
-            }
-            import tempfile
-            tmp_fd, tmp_path = tempfile.mkstemp(dir=str(cache_dir))
+        async with self._map_lock:
             try:
-                with os.fdopen(tmp_fd, "w") as fh:
-                    json.dump(data, fh)
-                os.replace(tmp_path, cache_path)
-            except Exception:
+                data = {
+                    "map": dict(self._bot_mention_map),
+                }
+                import tempfile
+                tmp_fd, tmp_path = tempfile.mkstemp(dir=str(cache_dir))
                 try:
-                    os.unlink(tmp_path)
-                except OSError:
-                    pass
-                raise
-        except Exception:
-            logger.debug("[Feishu] Failed to write bot map cache", exc_info=True)
+                    with os.fdopen(tmp_fd, "w") as fh:
+                        json.dump(data, fh)
+                    os.replace(tmp_path, cache_path)
+                except Exception:
+                    try:
+                        os.unlink(tmp_path)
+                    except OSError:
+                        pass
+                    raise
+            except Exception:
+                logger.debug("[Feishu] Failed to write bot map cache", exc_info=True)
 
     def _cache_file_exists(self) -> bool:
         return (get_hermes_home() / self._BOT_MAP_CACHE_FILE).is_file()
@@ -3224,6 +3225,10 @@ class FeishuAdapter(BasePlatformAdapter):
                 )
                 if not _mentioning_bot_name:
                     _mentioning_bot_name = sender_open_id  # fallback to open_id
+                    # Auto-discover: persist newly encountered bot
+                    # so it survives gateway restarts.
+                    await self._register_bot_name(sender_open_id, sender_open_id)
+                    await self._save_bot_map_cache()
 
         if inbound_type == MessageType.TEXT:
             text = _strip_edge_self_mentions(text, mentions)
