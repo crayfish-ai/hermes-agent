@@ -60,12 +60,13 @@ import re
 import threading
 import time
 import uuid
+import tempfile
 from collections import OrderedDict
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, Dict, List, Literal, Optional, Sequence, Set
+from typing import Any, Dict, List, Literal, Optional, Sequence
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
@@ -1733,7 +1734,6 @@ class FeishuAdapter(BasePlatformAdapter):
             return
         if not isinstance(data, dict):
             return
-        now = time.time()
         try:
             # Safely restore bot map (must be a dict)
             bot_map = data.get("map", {})
@@ -1766,7 +1766,6 @@ class FeishuAdapter(BasePlatformAdapter):
                 data = {
                     "map": dict(self._bot_mention_map),
                 }
-                import tempfile
                 tmp_fd, tmp_path = tempfile.mkstemp(dir=str(cache_dir))
                 try:
                     with os.fdopen(tmp_fd, "w") as fh:
@@ -4046,7 +4045,8 @@ class FeishuAdapter(BasePlatformAdapter):
         union_id = getattr(sender_id, "union_id", None) or None
         # Prefer tenant-scoped user_id; fall back to app-scoped open_id.
         primary_id = user_id or open_id
-        # bot/v3/bots/basic_batch only accepts open_id.
+        # Bots are resolved via open_id; contact.v3.user.get can serve
+        # both users and bots within the app's contact scope.
         name_lookup_id = open_id if is_bot else (primary_id or union_id)
         display_name = await self._resolve_sender_name_from_api(
             name_lookup_id, is_bot=is_bot,
@@ -4076,8 +4076,9 @@ class FeishuAdapter(BasePlatformAdapter):
         *,
         is_bot: bool = False,
     ) -> Optional[str]:
-        """Bots divert to bot/basic_batch — contact API doesn't return bot names.
-        Failures are silent so the pipeline never blocks on name resolution.
+        """Query ``contact.v3.user.get`` (serves both users and bots
+        within the app's contact scope).  Failures are silent so the
+        pipeline never blocks on name resolution.
         """
         if not sender_id or not self._client:
             return None
@@ -4101,12 +4102,12 @@ class FeishuAdapter(BasePlatformAdapter):
             if not response or not response.success():
                 return None
             user = getattr(getattr(response, "data", None), "user", None)
-            name = (
-                getattr(user, "name", None)
-                or getattr(user, "display_name", None)
-                or getattr(user, "nickname", None)
-                or getattr(user, "en_name", None)
-            )
+            name = None
+            for attr in ("name", "display_name", "nickname", "en_name"):
+                val = getattr(user, attr, None)
+                if val is not None:
+                    name = val
+                    break
             if name is not None and isinstance(name, str):
                 name = name.strip()
                 self._sender_name_cache[trimmed] = (name, now + _FEISHU_SENDER_NAME_TTL_SECONDS)
@@ -4486,8 +4487,8 @@ class FeishuAdapter(BasePlatformAdapter):
         result = content
         for bot_name, open_id in bot_mention_map.items():
             _cjk = "\u4e00-\u9fff\u3000-\u303f\uff00-\uffef"
-            _prefix = r"(^|[\s,，。\.!！?？:：;；\)\）\(\（\-—…" + _cjk + r"])"
-            _suffix = r"(?=[\s,，。\.!！?？:：;；\)\）\-—…" + _cjk + r"]|$)"
+            _prefix = r"(^|[\s,，。\.!！?？:：;；\）\）\(\（\-—…" + _cjk + r"])"
+            _suffix = r"(?=[\s,，。\.!！?？:：;；\）\（\(\-—…" + _cjk + r"]|$)"
             pattern = _prefix + r"@" + re.escape(bot_name) + _suffix
             new_result = re.sub(pattern, r"\1", result, flags=re.MULTILINE | re.IGNORECASE)
             if new_result != result:
@@ -4498,7 +4499,15 @@ class FeishuAdapter(BasePlatformAdapter):
     def _build_mention_post_payload(self, content: str, mentioned_open_ids: list[str]) -> str:
         """Build a Feishu post payload with explicit ``at`` tags."""
         rows: list[list[dict]] = []
-        at_row = [{"tag": "at", "user_id": oid} for oid in mentioned_open_ids]
+        oid_to_name = {v: k for k, v in self._bot_mention_map.items()}
+        at_row = [
+            {
+                "tag": "at",
+                "user_id": oid,
+                "user_name": oid_to_name.get(oid, ""),
+            }
+            for oid in mentioned_open_ids
+        ]
         for i in range(len(at_row) - 1, 0, -1):
             at_row.insert(i, {"tag": "text", "text": " "})
         rows.append(at_row)

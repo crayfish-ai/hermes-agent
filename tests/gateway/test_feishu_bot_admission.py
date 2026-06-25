@@ -518,15 +518,25 @@ def test_resolve_sender_profile_uses_open_id_for_bot_name_lookup():
     from plugins.platforms.feishu.adapter import FeishuAdapter
 
     adapter = object.__new__(FeishuAdapter)
-    adapter._client = object()
     adapter._sender_name_cache = {}
     seen_ids = []
 
-    async def _fake_fetch_bot_names(bot_ids):
-        seen_ids.extend(bot_ids)
-        return {"ou_peer": "Peer Bot"}
+    user = SimpleNamespace(name="Peer Bot", display_name=None, nickname=None, en_name=None)
+    data = SimpleNamespace(user=user)
+    resp = SimpleNamespace(data=data)
+    resp.success = lambda: True  # type: ignore
 
-    adapter._fetch_bot_names = _fake_fetch_bot_names
+    def _fake_get_user(request):
+        seen_ids.append(getattr(request, "user_id", None))
+        return resp
+
+    adapter._client = SimpleNamespace(
+        contact=SimpleNamespace(
+            v3=SimpleNamespace(
+                user=SimpleNamespace(get=_fake_get_user)
+            )
+        )
+    )
 
     profile = asyncio.run(
         adapter._resolve_sender_profile(
