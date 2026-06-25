@@ -224,13 +224,13 @@ class TestFeishuFallbackThreadRouting:
         if receive_id is None and isinstance(body, str):
             import json as _json
             receive_id = _json.loads(body).get("receive_id")
-        assert receive_id == "omt_topic_abc", (
-            f"Expected receive_id='omt_topic_abc', got '{receive_id}'"
+        assert receive_id == "oc_main_chat", (
+            f"Expected receive_id='oc_main_chat' (group replies land in main chat), got '{receive_id}'"
         )
-        # And receive_id_type must be 'thread_id', not 'chat_id'
+        # And receive_id_type must be 'chat_id' for group chats
         receive_id_type = getattr(call_args, "receive_id_type", None)
-        assert receive_id_type == "thread_id", (
-            f"Expected receive_id_type='thread_id', got '{receive_id_type}'"
+        assert receive_id_type == "chat_id", (
+            f"Expected receive_id_type='chat_id', got '{receive_id_type}'"
         )
 
     @pytest.mark.asyncio

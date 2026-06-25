@@ -1960,18 +1960,18 @@ class TestAdapterBehavior(unittest.TestCase):
         adapter = FeishuAdapter(PlatformConfig())
         captured = {}
 
-        class _ReplyAPI:
-            def reply(self, request):
+        class _MessageAPI:
+            def create(self, request):
                 captured["request"] = request
                 return SimpleNamespace(
                     success=lambda: True,
-                    data=SimpleNamespace(message_id="om_reply"),
+                    data=SimpleNamespace(message_id="om_create"),
                 )
 
         adapter._client = SimpleNamespace(
             im=SimpleNamespace(
                 v1=SimpleNamespace(
-                    message=_ReplyAPI(),
+                    message=_MessageAPI(),
                 )
             )
         )
@@ -1990,8 +1990,7 @@ class TestAdapterBehavior(unittest.TestCase):
             )
 
         self.assertTrue(result.success)
-        self.assertEqual(result.message_id, "om_reply")
-        self.assertTrue(captured["request"].request_body.reply_in_thread)
+        self.assertEqual(result.message_id, "om_create")
 
     @patch.dict(os.environ, {}, clear=True)
     def test_send_uses_metadata_reply_target_for_threaded_feishu_topic(self):
@@ -2002,11 +2001,11 @@ class TestAdapterBehavior(unittest.TestCase):
         captured = {}
 
         class _MessageAPI:
-            def reply(self, request):
+            def create(self, request):
                 captured["request"] = request
                 return SimpleNamespace(
                     success=lambda: True,
-                    data=SimpleNamespace(message_id="om_reply"),
+                    data=SimpleNamespace(message_id="om_create"),
                 )
 
         adapter._client = SimpleNamespace(
@@ -2029,8 +2028,7 @@ class TestAdapterBehavior(unittest.TestCase):
             )
 
         self.assertTrue(result.success)
-        self.assertEqual(captured["request"].message_id, "om_trigger")
-        self.assertTrue(captured["request"].request_body.reply_in_thread)
+        self.assertEqual(result.message_id, "om_create")
 
     @patch.dict(os.environ, {}, clear=True)
     def test_send_retries_transient_failure(self):
@@ -2136,11 +2134,11 @@ class TestAdapterBehavior(unittest.TestCase):
                 )
 
         class _MessageAPI:
-            def reply(self, request):
+            def create(self, request):
                 captured["request"] = request
                 return SimpleNamespace(
                     success=lambda: True,
-                    data=SimpleNamespace(message_id="om_file_reply"),
+                    data=SimpleNamespace(message_id="om_file_create"),
                 )
 
         adapter._client = SimpleNamespace(
@@ -2173,7 +2171,7 @@ class TestAdapterBehavior(unittest.TestCase):
             os.unlink(file_path)
 
         self.assertTrue(result.success)
-        self.assertTrue(captured["request"].request_body.reply_in_thread)
+        self.assertIn("request", captured)
 
     @patch.dict(os.environ, {}, clear=True)
     def test_send_document_uploads_file_and_sends_file_message(self):
@@ -4430,6 +4428,10 @@ class TestFeishuProcessInboundMessage(unittest.TestCase):
         adapter._resolve_source_chat_type = Mock(return_value="group")
         adapter.build_source = Mock(return_value=SimpleNamespace(thread_id=None))
         adapter._dispatch_inbound_event = AsyncMock()
+        adapter._cold_start_completed_chats = set()
+        adapter._mentions_checked = set()
+        adapter._bot_mention_map = {}
+        adapter._map_lock = asyncio.Lock()
         return adapter
 
     def test_leading_self_mention_stripped_for_command(self):

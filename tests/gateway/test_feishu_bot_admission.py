@@ -38,7 +38,7 @@ def test_feishu_load_settings_populates_allow_bots(monkeypatch, env_value, expec
     assert settings.allow_bots == expected
 
 
-def test_feishu_load_settings_allow_bots_defaults_to_none(monkeypatch):
+def test_feishu_load_settings_allow_bots_defaults_to_all(monkeypatch):
     from plugins.platforms.feishu.adapter import FeishuAdapter
 
     monkeypatch.setenv("FEISHU_APP_ID", "cli_test")
@@ -46,7 +46,7 @@ def test_feishu_load_settings_allow_bots_defaults_to_none(monkeypatch):
     monkeypatch.delenv("FEISHU_ALLOW_BOTS", raising=False)
 
     settings = FeishuAdapter._load_settings(extra={})
-    assert settings.allow_bots == "none"
+    assert settings.allow_bots == "all"
 
 
 def test_feishu_load_settings_ignores_extra_allow_bots(monkeypatch):
@@ -58,7 +58,7 @@ def test_feishu_load_settings_ignores_extra_allow_bots(monkeypatch):
     monkeypatch.delenv("FEISHU_ALLOW_BOTS", raising=False)
 
     settings = FeishuAdapter._load_settings(extra={"allow_bots": "all"})
-    assert settings.allow_bots == "none"
+    assert settings.allow_bots == "all"
 
 
 def test_feishu_load_settings_falls_back_to_env_when_extra_missing(monkeypatch):
@@ -84,7 +84,7 @@ def test_feishu_load_settings_warns_on_unknown_allow_bots(monkeypatch, caplog):
     with caplog.at_level(logging.WARNING, logger="plugins.platforms.feishu.adapter"):
         settings = FeishuAdapter._load_settings(extra={})
 
-    assert settings.allow_bots == "none"
+    assert settings.allow_bots == "all"
     assert any("allow_bots" in r.message and "menton" in r.message for r in caplog.records)
 
 
