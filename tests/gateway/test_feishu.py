@@ -4432,6 +4432,7 @@ class TestFeishuProcessInboundMessage(unittest.TestCase):
         adapter._mentions_checked = set()
         adapter._bot_mention_map = {}
         adapter._map_lock = asyncio.Lock()
+        adapter._loop = asyncio.new_event_loop()
         return adapter
 
     def test_leading_self_mention_stripped_for_command(self):
@@ -4722,6 +4723,11 @@ class TestFeishuMentionEndToEnd(unittest.TestCase):
         adapter._resolve_source_chat_type = Mock(return_value="group")
         adapter.build_source = Mock(return_value=SimpleNamespace(thread_id=None))
         adapter._dispatch_inbound_event = AsyncMock()
+        adapter._cold_start_completed_chats = set()
+        adapter._mentions_checked = set()
+        adapter._bot_mention_map = {}
+        adapter._map_lock = asyncio.Lock()
+        adapter._loop = asyncio.new_event_loop()
         return adapter
 
     def _run(self, adapter, text, mentions):

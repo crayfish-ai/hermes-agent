@@ -1720,7 +1720,7 @@ class FeishuAdapter(BasePlatformAdapter):
         inbound bot message."""
         cache_path = str(get_hermes_home() / self._BOT_MAP_CACHE_FILE)
         try:
-            with open(cache_path) as fh:
+            with open(cache_path, encoding="utf-8") as fh:
                 data = json.load(fh)
         except (OSError, json.JSONDecodeError):
             return
