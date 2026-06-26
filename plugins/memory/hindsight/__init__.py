@@ -1443,10 +1443,16 @@ class HindsightMemoryProvider(MemoryProvider):
 
     def system_prompt_block(self) -> str:
         if self._memory_mode == "context":
+            if self._auto_recall:
+                return (
+                    f"# Hindsight Memory\n"
+                    f"Active (context mode). Bank: {self._bank_id}, budget: {self._budget}.\n"
+                    f"Relevant memories are automatically injected into context."
+                )
             return (
                 f"# Hindsight Memory\n"
-                f"Active (context mode). Bank: {self._bank_id}, budget: {self._budget}.\n"
-                f"Relevant memories are automatically injected into context."
+                f"Active (context mode, auto-recall off). Bank: {self._bank_id}, budget: {self._budget}.\n"
+                f"Auto-injection disabled — only manually-retained content is visible."
             )
         if self._memory_mode == "tools":
             return (
@@ -1455,10 +1461,19 @@ class HindsightMemoryProvider(MemoryProvider):
                 f"Use hindsight_recall to search, hindsight_reflect for synthesis, "
                 f"hindsight_retain to store facts."
             )
+        # hybrid mode
+        if self._auto_recall:
+            return (
+                f"# Hindsight Memory\n"
+                f"Active. Bank: {self._bank_id}, budget: {self._budget}.\n"
+                f"Relevant memories are automatically injected into context. "
+                f"Use hindsight_recall to search, hindsight_reflect for synthesis, "
+                f"hindsight_retain to store facts."
+            )
         return (
             f"# Hindsight Memory\n"
-            f"Active. Bank: {self._bank_id}, budget: {self._budget}.\n"
-            f"Relevant memories are automatically injected into context. "
+            f"Active (auto-recall off). Bank: {self._bank_id}, budget: {self._budget}.\n"
+            f"No automatic context injection — you must use tools to access memory. "
             f"Use hindsight_recall to search, hindsight_reflect for synthesis, "
             f"hindsight_retain to store facts."
         )

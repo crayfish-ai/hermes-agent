@@ -1460,6 +1460,25 @@ class TestSystemPrompt:
         assert "tools mode" in block
         assert "hindsight_recall" in block
 
+    def test_hybrid_mode_auto_recall_off(self, provider_with_config):
+        p = provider_with_config(auto_recall=False)
+        block = p.system_prompt_block()
+        assert "Hindsight Memory" in block
+        assert "hindsight_recall" in block
+        assert "automatically injected" not in block
+        assert "auto-recall off" in block
+        assert "No automatic context injection" in block
+
+    def test_context_mode_auto_recall_off(self, provider_with_config):
+        p = provider_with_config(memory_mode="context", auto_recall=False)
+        block = p.system_prompt_block()
+        assert "Hindsight Memory" in block
+        assert "context mode" in block
+        assert "hindsight_recall" not in block
+        assert "auto-recall off" in block
+        assert "automatically injected" not in block
+        assert "Auto-injection disabled" in block
+
 
 # ---------------------------------------------------------------------------
 # Config schema tests
