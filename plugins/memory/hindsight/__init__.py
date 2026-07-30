@@ -1522,6 +1522,9 @@ class HindsightMemoryProvider(MemoryProvider):
         Only handles ``action == "remove"`` — add/replace are the built-in
         store's own concern and already populate Hindsight via normal
         conversation retention.
+
+        Uses the *resolved* ``content`` parameter (the full entry text returned
+        by ``MemoryStore.remove()``), not a substring selector.
         """
         if action != "remove":
             return
@@ -1530,6 +1533,13 @@ class HindsightMemoryProvider(MemoryProvider):
             return
         if self._shutting_down.is_set():
             return
+
+        # Archive the full removed entry (not a substring selector).
+        archive_body = (
+            f"[Memory REMOVED from built-in store]\n"
+            f"Target: {target}\n"
+            f"Removed: {content}"
+        )
 
         # Snapshot state for the async writer
         metadata_snapshot = self._build_metadata(
@@ -1546,12 +1556,14 @@ class HindsightMemoryProvider(MemoryProvider):
         document_id, update_mode = self._resolve_retain_target(self._document_id)
         retain_async_flag = self._retain_async
         tags = _normalize_retain_tags(
-            ["builtin-memory", "removed-entry", f"target:{target}"]
+            ["builtin-memory", "memory-removed", f"memory-target:{target}"]
         )
+        if metadata and metadata.get("session_id"):
+            tags.append(f"session:{metadata['session_id']}")
 
         def _do_archival() -> None:
             kwargs = self._build_retain_kwargs(
-                content,
+                archive_body,
                 context=context,
                 metadata=metadata_snapshot,
                 tags=tags,
@@ -1568,6 +1580,10 @@ class HindsightMemoryProvider(MemoryProvider):
                     document_id=document_id,
                     retain_async=retain_async_flag,
                 )
+            )
+            logger.debug(
+                "Hindsight archived removed memory target=%r len=%d",
+                target, len(content),
             )
 
         self._ensure_writer()
