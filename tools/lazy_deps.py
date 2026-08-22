@@ -191,7 +191,7 @@ LAZY_DEPS: dict[str, tuple[str, ...]] = {
 
     # ─── Memory providers ──────────────────────────────────────────────────
     "memory.honcho": ("honcho-ai==2.2.0",),
-    "memory.hindsight": ("hindsight-client==0.6.1",),
+    "memory.hindsight": ("hindsight-client>=0.6.1",),
     # supermemory + mem0 are opt-in cloud memory providers with their own
     # SDKs. On the published Docker image the agent venv is sealed
     # (HERMES_DISABLE_LAZY_INSTALLS=1) and lazy installs are redirected to the
@@ -239,7 +239,7 @@ LAZY_DEPS: dict[str, tuple[str, ...]] = {
         "qrcode==7.4.2",
     ),
     "platform.feishu": (
-        "lark-oapi==1.6.8",
+        "lark-oapi>=1.7.1,<2.0",
         "qrcode==7.4.2",
     ),
     # WeCom callback-mode adapter — parses untrusted XML POST bodies. Pulls
